@@ -249,6 +249,18 @@ BOOST_AUTO_TEST_CASE(recursion_depth)
 	CHECK_ERROR(input, ParserError, "recursion");
 }
 
+BOOST_AUTO_TEST_CASE(multiple_assignment)
+{
+	BOOST_CHECK(successParse(R"({
+		function f(a:u256) -> r1:u256, r2:u256 {
+			r1 := a r2 := 7:u256
+		}
+		let x:u256 := 9:u256
+		let y:u256 := 2:u256
+		x, y := f(x)
+	})"));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 }
