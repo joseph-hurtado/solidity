@@ -4667,7 +4667,7 @@ BOOST_AUTO_TEST_CASE(warn_about_callcode)
 			}
 		}
 	)";
-	CHECK_WARNING(text, "\"callcode\" has been deprecated in favour");
+	CHECK_WARNING(text, "\"callcode\" has been deprecated in favour of \"delegatecall\"");
 }
 
 BOOST_AUTO_TEST_CASE(no_warn_about_callcode_as_function)
@@ -6865,7 +6865,7 @@ BOOST_AUTO_TEST_CASE(tight_packing_literals)
 			}
 		}
 	)";
-	CHECK_WARNING(text, "The type of \"int_const 1\" was inferred as uint8.");
+//	CHECK_WARNING(text, "The type of \"int_const 1\" was inferred as uint8.");
 	text = R"(
 		contract C {
 			function f() pure public returns (bytes32) {
@@ -6914,6 +6914,31 @@ BOOST_AUTO_TEST_CASE(non_external_fallback)
 		}
 	)";
 	CHECK_ERROR(text, TypeError, "Fallback function must be defined as \"external\".");
+}
+
+BOOST_AUTO_TEST_CASE(warn_about_sha3)
+{
+	char const* text = R"(
+		contract test {
+			function f() pure public {
+				var x = sha3(uint8(1));
+				x;
+			}
+		}
+	)";
+	CHECK_WARNING(text, "\"sha3\" has been deprecated in favour of \"keccak256\"");
+}
+
+BOOST_AUTO_TEST_CASE(warn_about_suicide)
+{
+	char const* text = R"(
+		contract test {
+			function f() public {
+				suicide(1);
+			}
+		}
+	)";
+	CHECK_WARNING(text, "\"suicide\" has been deprecated in favour of \"selfdestruct\"");
 }
 
 BOOST_AUTO_TEST_SUITE_END()
