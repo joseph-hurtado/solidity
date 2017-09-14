@@ -335,7 +335,7 @@ BOOST_AUTO_TEST_CASE(external_function)
 	)";
 	BOTH_ENCODERS(
 		compileAndRun(sourceCode);
-		callContractFunction("f(uint256)");
+		callContractFunction("f(uint256)", u256(0));
 		string functionIdF = asString(m_contractAddress.ref()) + asString(FixedHash<4>(dev::keccak256("f(uint256)")).ref());
 		REQUIRE_LOG_DATA(encodeArgs(functionIdF, functionIdF));
 	)
@@ -357,7 +357,7 @@ BOOST_AUTO_TEST_CASE(external_function_cleanup)
 	)";
 	BOTH_ENCODERS(
 		compileAndRun(sourceCode);
-		callContractFunction("f(uint256)");
+		callContractFunction("f(uint256)", u256(0));
 		REQUIRE_LOG_DATA(encodeArgs(string(24, char(-1)), string(24, char(-1))));
 	)
 }

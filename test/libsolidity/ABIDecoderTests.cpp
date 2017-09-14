@@ -55,7 +55,7 @@ BOOST_AUTO_TEST_CASE(value_types)
 {
 	string sourceCode = R"(
 		contract C {
-			function f(uint a, uint16 b, uint24 c, int24 d, bytes3 x, bool e, C g) returns (uint) {
+			function f(uint a, uint16 b, uint24 c, int24 d, bytes3 x, bool e, C g) pure returns (uint) {
 				if (a != 1) return 1;
 				if (b != 2) return 2;
 				if (c != 3) return 3;
@@ -81,25 +81,118 @@ BOOST_AUTO_TEST_CASE(enums)
 	string sourceCode = R"(
 		contract C {
 			enum E { A, B }
-			function f(E e) returns (uint) {
-				uint x;
+			function f(E e) pure returns (uint x) {
 				assembly { x := e }
+			}
+		}
+	)";
+	bool newDecoder = false;
+	BOTH_ENCODERS(
+		compileAndRun(sourceCode);
+		BOOST_CHECK(callContractFunction("f(uint8)", 0) == encodeArgs(u256(0)));
+		BOOST_CHECK(callContractFunction("f(uint8)", 1) == encodeArgs(u256(1)));
+		// The old decoder was not as strict about enums
+		BOOST_CHECK(callContractFunction("f(uint8)", 2) == (newDecoder ? encodeArgs() : encodeArgs(2)));
+		BOOST_CHECK(callContractFunction("f(uint8)", u256(-1)) == (newDecoder? encodeArgs() : encodeArgs(u256(0xff))));
+		newDecoder = true;
+	)
+}
+
+BOOST_AUTO_TEST_CASE(cleanup)
+{
+	string sourceCode = R"(
+		contract C {
+			function f(uint16 a, int16 b, address c, bytes3 d, bool e)
+					pure returns (uint v, uint w, uint x, uint y, uint z) {
+				assembly { v := a  w := b x := c y := d z := e}
 			}
 		}
 	)";
 	BOTH_ENCODERS(
 		compileAndRun(sourceCode);
-			cout << toHex(callContractFunction("f(uint8)", 0)) << endl;
-		BOOST_CHECK(callContractFunction("f(uint8)", 0) == encodeArgs(u256(0)));
-		BOOST_CHECK(callContractFunction("f(uint8)", 1) == encodeArgs(u256(1)));
-		BOOST_CHECK(callContractFunction("f(uint8)", 2) == encodeArgs());
-		BOOST_CHECK(callContractFunction("f(uint8)", u256(-1)) == encodeArgs());
+		BOOST_CHECK(
+			callContractFunction("f(uint16,int16,address,bytes3,bool)", 1, 2, 3, "a", true) ==
+			encodeArgs(u256(1), u256(2), u256(3), string("a"), true)
+		);
+		BOOST_CHECK(
+			callContractFunction(
+				"f(uint16,int16,address,bytes3,bool)",
+				u256(0xffffff), u256(0x1ffff), u256(-1), string("abcd"), u256(4)
+			) ==
+			encodeArgs(u256(0xffff), u256(-1), (u256(1) << 160) - 1, string("abc"), true)
+		);
 	)
 }
 
+BOOST_AUTO_TEST_CASE(fixed_arrays)
+{
+	string sourceCode = R"(
+		contract C {
+			function f(uint16[3] a, uint16[2][3] b, uint i, uint j, uint k)
+					pure returns (uint, uint) {
+				return (a[i], b[j][k]);
+			}
+		}
+	)";
+	BOTH_ENCODERS(
+		compileAndRun(sourceCode);
+		bytes args = encodeArgs(
+			1, 2, 3,
+			11, 12,
+			21, 22,
+			31, 32,
+			1, 2, 1
+		);
+		BOOST_CHECK(
+			callContractFunction("f(uint16[3],uint16[2][3],uint256,uint256,uint256)", args) ==
+			encodeArgs(u256(2), u256(32))
+		);
+	)
+}
+
+BOOST_AUTO_TEST_CASE(dynamic_arrays)
+{
+	string sourceCode = R"(
+		contract C {
+			function f(uint a, uint16[] b, uint c)
+					pure returns (uint, uint, uint) {
+				return (b.length, b[a], c);
+			}
+		}
+	)";
+	BOTH_ENCODERS(
+		compileAndRun(sourceCode);
+		bytes args = encodeArgs(
+			6, 0x60, 9,
+			7,
+			11, 12, 13, 14, 15, 16, 17
+		);
+		BOOST_CHECK(
+			callContractFunction("f(uint256,uint16[],uint256)", args) ==
+			encodeArgs(u256(7), u256(17), u256(9))
+		);
+	)
+}
+
+// dynamic nested arrays
+
+// structs
+// combination of structs, arrays and value types
+// calldata types
+// decoding from memory (used for constructor, especially forwarding to base constructor)
 // test about incorrect input length
-// tests about cleanup should use assembly
-// More tests about overflow and stuff
+// test cleanup inside arrays and structs
+// test decoding storage pointers
+
+// btye arrays
+
+// test that calldata types are decoded efficiently, i.e. no element access for bytes,
+// and perhaps also no element access for uint256
+
+// TODO: For decoding from memory, we might want to avoid a copy. Could that pose a problem?
+// TODO: ridiculously sized arrays, also when the size comes from deeply nested "short" arrays
+
+// check again in the code that "offset" is always compared to "end"
 
 BOOST_AUTO_TEST_SUITE_END()
 
