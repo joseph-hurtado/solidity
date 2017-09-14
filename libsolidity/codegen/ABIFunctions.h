@@ -187,6 +187,10 @@ private:
 	std::string roundUpFunction();
 
 	std::string arrayLengthFunction(ArrayType const& _type);
+	/// @returns the name of a function that computes the number of bytes required
+	/// to store an array in memory given its length (internally encoded, not ABI encoded).
+	/// The function reverts for too large lengthes.
+	std::string arrayAllocationSizeFunction(ArrayType const& _type);
 	/// @returns the name of a function that converts a storage slot number
 	/// or a memory pointer to the slot number / memory pointer for the data position of an array
 	/// which is stored in that slot / memory area.
@@ -194,6 +198,12 @@ private:
 	/// @returns the name of a function that advances an array data pointer to the next element.
 	/// Only works for memory arrays and storage arrays that store one item per slot.
 	std::string nextArrayElementFunction(ArrayType const& _type);
+
+	/// @returns the name of a function that allocates memory.
+	/// Modifies the "free memory pointer"
+	/// Arguments: size
+	/// Return value: pointer
+	std::string allocationFunction();
 
 	/// Helper function that uses @a _creator to create a function and add it to
 	/// @a m_requestedFunctions if it has not been created yet and returns @a _name in both

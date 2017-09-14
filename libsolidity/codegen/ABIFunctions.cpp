@@ -22,9 +22,10 @@
 
 #include <libsolidity/codegen/ABIFunctions.h>
 
-#include <libdevcore/Whiskers.h>
-
 #include <libsolidity/ast/AST.h>
+#include <libsolidity/codegen/CompilerUtils.h>
+
+#include <libdevcore/Whiskers.h>
 
 #include <boost/algorithm/string/join.hpp>
 #include <boost/range/adaptor/reversed.hpp>
@@ -205,10 +206,9 @@ string ABIFunctions::cleanupFunction(Type const& _type, bool _revertOnFailure)
 			solUnimplemented("Fixed point types not implemented.");
 			break;
 		case Type::Category::Array:
-			solAssert(false, "Array cleanup requested.");
-			break;
 		case Type::Category::Struct:
-			solAssert(false, "Struct cleanup requested.");
+			solAssert(_type.dataStoredIn(DataLocation::Storage), "Cleanup requested for non-storage reference type.");
+			templ("body", "cleaned := value");
 			break;
 		case Type::Category::FixedBytes:
 		{
@@ -1035,20 +1035,20 @@ string ABIFunctions::abiEncodingFunctionFunctionType(
 
 string ABIFunctions::abiDecodingFunction(Type const& _type, bool _fromMemory)
 {
-	solAssert(_type.decodingType(), "");
 	TypePointer decodingType = _type.decodingType();
+	solAssert(decodingType, "");
 
-	if (auto arrayType = dynamic_cast<ArrayType const*>(&_type))
+	if (auto arrayType = dynamic_cast<ArrayType const*>(decodingType.get()))
 		return abiDecodingFunctionArray(*arrayType, _fromMemory);
-	else if (auto const* structType = dynamic_cast<StructType const*>(&_type))
+	else if (auto const* structType = dynamic_cast<StructType const*>(decodingType.get()))
 		return abiDecodingFunctionStruct(*structType, _fromMemory);
-	else if (auto const* functionType = dynamic_cast<FunctionType const*>(&_type))
+	else if (auto const* functionType = dynamic_cast<FunctionType const*>(decodingType.get()))
 		return abiDecodingFunctionFunctionType(*functionType, _fromMemory);
 
-	solAssert(_type.sizeOnStack() == 1, "");
-	solAssert(_type.isValueType(), "");
-	solAssert(_type.calldataEncodedSize() == 32, "");
-	solAssert(!_type.isDynamicallyEncoded(), "");
+	solAssert(decodingType->sizeOnStack() == 1, "");
+	solAssert(decodingType->isValueType(), "");
+	solAssert(decodingType->calldataEncodedSize() == 32, "");
+	solAssert(!decodingType->isDynamicallyEncoded(), "");
 
 	string functionName =
 		"abi_decode_" +
@@ -1062,15 +1062,74 @@ string ABIFunctions::abiDecodingFunction(Type const& _type, bool _fromMemory)
 		)");
 		templ("functionName", functionName);
 		templ("load", _fromMemory ? "mload" : "calldataload");
+		// Cleanup itself should use the type and not decodingType, because e.g.
+		// the decoding type of an enum is a plain int.
 		templ("cleanup", cleanupFunction(_type, true));
 		return templ.render();
 	});
 }
 
-string ABIFunctions::abiDecodingFunctionArray(ArrayType const& /*_type*/, bool /*_fromMemory*/)
+string ABIFunctions::abiDecodingFunctionArray(ArrayType const& _type, bool _fromMemory)
 {
-	solUnimplemented("");
-	return "";
+	// We do not yet support calldata arrays
+	solUnimplementedAssert(_type.dataStoredIn(DataLocation::Memory), "");
+	solUnimplementedAssert(!_type.isByteArray(), "");
+
+	string functionName =
+		"abi_decode_" +
+		_type.identifier() +
+		(_fromMemory ? "_fromMemory" : "");
+
+	solAssert(!_type.dataStoredIn(DataLocation::Storage), "");
+
+	return createFunction(functionName, [&]() {
+		string load = _fromMemory ? "mload" : "calldataload";
+		bool dynamicBase = _type.baseType()->isDynamicallyEncoded();
+		Whiskers templ(
+			R"(
+				function <functionName>(offset, end) -> array {
+					let length := <retrieveLength>
+					array := <allocate>(<allocationSize>(length))
+					let src := offset
+					let dst := array
+					<storeLength> // might update src and dst
+					<staticBoundsCheck>
+					for { let i := 0 } lt(i, length) { i := add(i, 1) }
+					{
+						let elementPos := <retrieveElementPos>
+						<dynamicBoundsCheck>
+						mstore(dst, <decodingFun>(elementPos, end))
+						dst := add(dst, 0x20) // does not work for byte array
+						src := add(src, <baseEncodedSize>)
+					}
+				}
+			)"
+		);
+		templ("functionName", functionName);
+		templ("retrieveLength", !_type.isDynamicallySized() ? toCompactHexWithPrefix(_type.length()) : load + "(offset)");
+		templ("allocate", allocationFunction());
+		templ("allocationSize", arrayAllocationSizeFunction(_type));
+		if (_type.isDynamicallySized())
+			templ("storeLength", "mstore(array, length) src := add(src, 0x20) dst := add(dst, 0x20)");
+		else
+			templ("storeLength", "");
+		string baseEncodedSize = toCompactHexWithPrefix(_type.baseType()->calldataEncodedSize());
+		if (dynamicBase)
+		{
+			templ("staticBoundsCheck", "");
+			templ("dynamicBoundsCheck", "switch gt(elementPos, end) case 1 { revert(0, 0) }");
+			templ("retrieveElementPos", "add(offset, " + load + "(src))");
+		}
+		else
+		{
+			templ("staticBoundsCheck", "switch gt(add(src, mul(length, " + baseEncodedSize + ")), end) case 1 { revert(0, 0) }");
+			templ("dynamicBoundsCheck", "");
+			templ("retrieveElementPos", "src");
+		}
+		templ("baseEncodedSize", baseEncodedSize);
+		templ("decodingFun", abiDecodingFunction(*_type.baseType(), _fromMemory));
+		return templ.render();
+	});
 }
 
 string ABIFunctions::abiDecodingFunctionStruct(StructType const& /*_type*/, bool /*_fromMemory*/)
@@ -1230,6 +1289,33 @@ string ABIFunctions::arrayLengthFunction(ArrayType const& _type)
 	});
 }
 
+string ABIFunctions::arrayAllocationSizeFunction(ArrayType const& _type)
+{
+	solAssert(_type.dataStoredIn(DataLocation::Memory), "");
+	string functionName = "array_allocation_size_" + _type.identifier();
+	return createFunction(functionName, [&]() {
+		Whiskers w(R"(
+			function <functionName>(length) -> size {
+				// Make sure we can allocate memory without overflow
+				switch gt(length, 0xffffffffffffffff) case 1 { revert(0, 0) }
+				size := <allocationSize>
+				<addLengthSlot>
+			}
+		)");
+		w("functionName", functionName);
+		if (_type.isByteArray())
+			// Round up
+			w("allocationSize", "and(add(length, 0x1f), not(0x1f))");
+		else
+			w("allocationSize", "mul(length, 0x20)");
+		if (_type.isDynamicallySized())
+			w("addLengthSlot", "size := add(size, 0x20)");
+		else
+			w("addLengthSlot", "");
+		return w.render();
+	});
+}
+
 string ABIFunctions::arrayDataAreaFunction(ArrayType const& _type)
 {
 	string functionName = "array_dataslot_" + _type.identifier();
@@ -1318,6 +1404,24 @@ string ABIFunctions::nextArrayElementFunction(ArrayType const& _type)
 			.render();
 		else
 			solAssert(false, "");
+	});
+}
+
+string ABIFunctions::allocationFunction()
+{
+	string functionName = "allocateMemory";
+	return createFunction(functionName, [&]() {
+		return Whiskers(R"(
+			function <functionName>(size) -> memPtr {
+				memPtr := mload(<freeMemoryPointer>)
+				let newFreePtr := add(memPtr, size)
+				switch lt(newFreePtr, memPtr) case 1 { revert(0, 0) }
+				mstore(<freeMemoryPointer>, newFreePtr)
+			}
+		)")
+		("freeMemoryPointer", to_string(CompilerUtils::freeMemoryPointer))
+		("functionName", functionName)
+		.render();
 	});
 }
 
