@@ -3,6 +3,8 @@
 Features:
  * Optimizer: Add new optimization step to remove unused ``JUMPDEST``s.
  * Type Checker: Warn on using literals as tight packing parameters in ``keccak256``, ``sha3``, ``sha256`` and ``ripemd160``.
+ * Code Generator: New ABI decoder which supports structs and arbitrarily nested
+   arrays and checks input size (activate using ``pragma experimental ABIEncoderV2;``.
 
 Bugfixes:
  * ABI JSON: Include all overloaded events.
