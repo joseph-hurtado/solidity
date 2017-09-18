@@ -168,8 +168,12 @@ private:
 		bool _fromMemory
 	);
 
-	/// Part of @a abiDecodingFunction for array types.
+	/// Part of @a abiDecodingFunction for "regular" array types.
 	std::string abiDecodingFunctionArray(ArrayType const& _type, bool _fromMemory);
+	/// Part of @a abiDecodingFunction for calldata array types.
+	std::string abiDecodingFunctionCalldataArray(ArrayType const& _type);
+	/// Part of @a abiDecodingFunction for byte array types.
+	std::string abiDecodingFunctionByteArray(ArrayType const& _type, bool _fromMemory);
 	/// Part of @a abiDecodingFunction for struct types.
 	std::string abiDecodingFunctionStruct(StructType const& _type, bool _fromMemory);
 	/// Part of @a abiDecodingFunction for array types.
