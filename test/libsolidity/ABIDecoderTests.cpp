@@ -178,22 +178,36 @@ BOOST_AUTO_TEST_CASE(dynamic_nested_arrays)
 {
 	string sourceCode = R"(
 		contract C {
-			function f(uint a, uint16[][] b, uint[][3] c, uint d)
-					pure returns (uint, uint, uint) {
-				return (b.length, b[1].length, b[1][1], c[1].length, c[1][1], d);
+			function f(uint a, uint16[][] b, uint[2][][3] c, uint d)
+					pure returns (uint, uint, uint, uint, uint, uint) {
+				return (b.length, b[1].length, b[1][1], c[1].length, c[1][1][1], d);
+			}
+			function test() {
+				uint16[][] memory b = new uint16[][](3);
+				b[0] = new uint16[](2);
+				b[0][0] = 0x55;
+				b[0][1] = 0x56;
+				b[1] = new uint16[](4);
+				b[1][0] = 0x65;
+				b[1][1] = 0x66;
+				b[1][2] = 0x67;
+				b[1][3] = 0x68;
+
+				uint[2][][3] memory c;
+				c[0] = new uint[2][](1);
+				c[0][0][1] = 0x75;
+				c[1] = new uint[2][](5);
+				c[1][1][1] = 0x85;
+
+				this.f(0x12, b, c, 0x13);
 			}
 		}
 	)";
-	BOTH_ENCODERS(
+	NEW_ENCODER(
 		compileAndRun(sourceCode);
-		bytes args = encodeArgs(
-			101, 0x80, ??, 102,
-			2, 0x40, ??,
-			11, 12, 13, 14, 15, 16, 17
-		);
 		BOOST_CHECK(
-			callContractFunction("f(uint256,uint16[][],uint256[][3],uint256)", args) ==
-			encodeArgs(u256(7), u256(17), u256(9))
+			callContractFunction("test()") ==
+			encodeArgs(u256(0x12), u256(4), 0x66, 5, 0x85, 0x13)
 		);
 	)
 }
