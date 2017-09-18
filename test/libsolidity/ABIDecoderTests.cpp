@@ -174,10 +174,31 @@ BOOST_AUTO_TEST_CASE(dynamic_arrays)
 	)
 }
 
+BOOST_AUTO_TEST_CASE(dynamic_nested_arrays)
+{
+	string sourceCode = R"(
+		contract C {
+			function f(uint a, uint16[][] b, uint[][3] c, uint d)
+					pure returns (uint, uint, uint) {
+				return (b.length, b[1].length, b[1][1], c[1].length, c[1][1], d);
+			}
+		}
+	)";
+	BOTH_ENCODERS(
+		compileAndRun(sourceCode);
+		bytes args = encodeArgs(
+			101, 0x80, ??, 102,
+			2, 0x40, ??,
+			11, 12, 13, 14, 15, 16, 17
+		);
+		BOOST_CHECK(
+			callContractFunction("f(uint256,uint16[][],uint256[][3],uint256)", args) ==
+			encodeArgs(u256(7), u256(17), u256(9))
+		);
+	)
+}
 // dynamic nested arrays
 
-// structs
-// combination of structs, arrays and value types
 // calldata types
 // decoding from memory (used for constructor, especially forwarding to base constructor)
 // test about incorrect input length
@@ -193,6 +214,9 @@ BOOST_AUTO_TEST_CASE(dynamic_arrays)
 // TODO: ridiculously sized arrays, also when the size comes from deeply nested "short" arrays
 
 // check again in the code that "offset" is always compared to "end"
+
+// structs
+// combination of structs, arrays and value types
 
 BOOST_AUTO_TEST_SUITE_END()
 
