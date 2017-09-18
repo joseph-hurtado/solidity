@@ -1155,7 +1155,7 @@ string ABIFunctions::abiDecodingFunctionCalldataArray(ArrayType const& _type)
 		string templ;
 		if (_type.isDynamicallySized())
 			templ = R"(
-				function <functionName>(offset, end) -> (arrayPos, length) {
+				function <functionName>(offset, end) -> arrayPos, length {
 					length := mload(offset)
 					switch gt(length, 0xffffffffffffffff) case 1 { revert(0, 0) }
 					arrayPos := add(offset, 0x20)
