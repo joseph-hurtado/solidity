@@ -5279,7 +5279,7 @@ BOOST_AUTO_TEST_CASE(invalid_mobile_type)
 				}
 			}
 	)";
-	CHECK_ERROR(text, TypeError, "Invalid mobile type.");
+	CHECK_ERROR(text, TypeError, "Invalid rational number.");
 }
 
 BOOST_AUTO_TEST_CASE(warns_msg_value_in_non_payable_public_function)
@@ -6689,6 +6689,37 @@ BOOST_AUTO_TEST_CASE(tight_packing_literals)
 		}
 	)";
 	CHECK_WARNING(text, "The type of \"int_const 1\" was inferred as uint8.");
+}
+
+BOOST_AUTO_TEST_CASE(invalid_literal_in_tuple)
+{
+	char const* text = R"(
+		contract C {
+			function f() pure public {
+				uint x;
+				(x, ) = (1E111);
+			}
+		}
+	)";
+	CHECK_ERROR(text, TypeError, "Invalid rational number.");
+	text = R"(
+		contract C {
+			function f() pure public {
+				uint x;
+				(x, ) = (1, 1E111);
+			}
+		}
+	)";
+	CHECK_ERROR(text, TypeError, "Invalid rational number.");
+	text = R"(
+		contract C {
+			function f() pure public {
+				uint x;
+				(x, ) = (1E111, 1);
+			}
+		}
+	)";
+	CHECK_ERROR(text, TypeError, "Invalid rational number.");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

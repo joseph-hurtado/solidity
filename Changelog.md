@@ -12,6 +12,7 @@ Features:
  * Type Checker: Warn on using literals as tight packing parameters in ``keccak256``, ``sha3``, ``sha256`` and ``ripemd160``.
  * Type Checker: Enforce ``view`` and ``pure``.
  * Type Checker: Enforce ``view`` / ``constant`` with error as experimental 0.5.0 feature.
+ * Type Checker: Validate each number literal in tuple expressions even if they are not assigned from.
 
 Bugfixes:
  * ABI JSON: Include all overloaded events.
